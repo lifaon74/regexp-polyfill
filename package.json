@@ -1,0 +1,24 @@
+{
+  "name": "regexp-polyfill",
+  "version": "0.1.0",
+  "description": "Polyfill RegExp : Named capture",
+  "main": "regexp-polyfill.js",
+  "scripts": {
+    "start": "npm run min",
+    "min": "uglifyjs regexp-polyfill.js --stats -m -o regexp-polyfill.min.js",
+    "test": "mocha ./tests/test.js",
+    "serve": "http-server  ./"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lifaon74/regexp-polyfill"
+  },
+  "author": "valentin",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^0.9.0",
+    "mocha": "^3.2.0",
+    "selenium-webdriver": "^3.3.0",
+    "uglify-js": "^2.7.5"
+  }
+}
