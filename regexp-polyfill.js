@@ -1,185 +1,256 @@
-(function() {
-  /**
-   * Polyfill creation of custom events
-   */
-
-  // ✓, ✗
-
-  /**
-   * Polyfill Event
-   */
+(function(global) {
   try {
-    var event = new window.Event('event', { bubbles: true, cancelable: true });
+    global.RegExp('(?<test>a)');
   } catch (error) {
-    var EventOriginal = window.CustomEvent || window.Event;
-    var Event = function(eventName, params) {
-      params = params || {};
-      var event = document.createEvent('Event');
-      event.initEvent(
-        eventName,
-        (params.bubbles === void 0) ? false : params.bubbles,
-        (params.cancelable === void 0) ? false : params.cancelable,
-        (params.detail === void 0) ? {} : params.detail
-      );
-      return event;
+    var _RegExp = global.RegExp;
+
+    // https://github.com/commenthol/named-regexp-groups/blob/master/src/index.js
+    // https://github.com/slevithan/xregexp/blob/master/src/xregexp.js
+    // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/RegExp
+    // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/String
+    var R_NAME = /([a-zA-Z_$][a-zA-Z_$0-9]{0,50})/;
+    var R_NAME_REPLACE = new _RegExp('\\$<' + R_NAME.source + '>', 'g');
+    var R_NAMED_BACKREF = new _RegExp('^[?:]&' + R_NAME.source);
+    var R_GROUP = new _RegExp('^[?:]<' + R_NAME.source + '>([^]*)');
+    var R_GROUPS = /([\\]?[()])/g;
+    var R_EMPTY_GROUPS = /([^\\]|^)\(\)/g;
+
+    function assignProto(instance, target) {
+      var proto = Object.getPrototypeOf(instance);
+      if (target.__proto__) {
+        target.__proto__ = proto;
+      } else {
+        for (var key in proto) {
+          target[key] = proto[key];
+        }
+      }
+      return target;
+    }
+
+    function getRegExpFlags(regExp) {
+      if (typeof regExp.flags === 'string') {
+        return regExp.flags;
+      } else {
+        var flags = '';
+        if (regExp.ignoreCase) { flags += 'i'; }
+        if (regExp.multiline) { flags += 'm'; }
+        if (regExp.global) {  flags += 'g'; }
+
+        return flags;
+      }
+    }
+
+    function generate(input, flags) {
+      var pattern;
+
+      if (input instanceof _RegExp) {
+        if (flags === void 0) {
+          flags = getRegExpFlags(input);
+        }
+        pattern = input.source;
+      } else {
+        pattern = String(input);
+      }
+
+      var output = {
+        groups: {},
+        named: {},
+        flags: (flags === void 0) ? '' : String(flags),
+        source: '',
+        originalSource: pattern
+      };
+
+      var store = {
+        count: 0,     // counter for unnamed matching group
+        groups: [''], // store for named pattern
+        names: []     // store for names of capture groups
+      };
+
+      var index = 0;
+      var groups = pattern.split(R_GROUPS);
+      output.source = groups.map(function(part, i) {
+        var name;
+        var block;
+        var isGroup = false;
+
+        switch(part) {
+          case '(':
+            store.groups.push('');
+            store.names.push('');
+            break;
+          case ')':
+            block = store.groups.pop();
+            name = store.names.pop();
+            if(name) {
+              output.named[name] = block.substr(1);
+            }
+            break;
+          default:
+            // is it a real group, not a cluster (?:...), or assertion (?=...), (?!...)
+            isGroup = groups[i - 1] === '(' && !/^\?[:!=]/.test(part);
+
+            if(isGroup) {
+              index++;
+              // named capture group check
+              name = R_GROUP.exec(part);
+              if(name && name[1]) {
+                if(!output.groups[name[1]]) {
+                  store.names[store.names.length - 1] = name[1];
+                  output.groups[name[1]] = index;
+                } else {
+                  output.groups[store.count++] = index;
+                }
+                part = name[2] || '';
+                if(groups[i + 1] === ')' && !name[2]) {
+                  part = '[^]+';
+                }
+              } else {
+                // is not a cluster, assertion or named capture group
+                output.groups[store.count++] = index;
+              }
+              // named backreference check
+              name = R_NAMED_BACKREF.exec(part);
+              if(name && name[1]) {
+                part = output.named[name[1]] || '';
+              }
+            }
+            break;
+        }
+        store.groups = store.groups.map(function(group) {
+          return (group + part);
+        });
+
+        return part;
+      })
+        .join('')
+        .replace(R_EMPTY_GROUPS, '$1'); // remove any empty groups
+
+      // console.log(output);
+      return output;
+    }
+
+    var ExtendedRegExp = function(pattern, flags) {
+      var data = generate(pattern, flags);
+
+      var regexp = new _RegExp(data.source, data.flags);
+      Object.defineProperty(this, '_regexp', { value: regexp });
+      Object.defineProperty(this, '_data', { value: data });
     };
-    Event.prototype = EventOriginal.prototype;
-    window.Event = Event;
+
+    ExtendedRegExp.prototype = {};
+    ['global', 'ignoreCase', 'multiline'].forEach(function(propertyName) {
+      Object.defineProperty(ExtendedRegExp.prototype, propertyName,  {
+        enumerable: true,
+        get: function() {
+          return this._regexp[propertyName];
+        }
+      });
+    });
+
+    Object.defineProperty(ExtendedRegExp.prototype, 'lastIndex',  {
+      enumerable: true,
+      get: function() {
+        return this._regexp.lastIndex;
+      },
+      set: function(value) {
+        this._regexp.lastIndex = value;
+      }
+    });
+
+    Object.defineProperty(ExtendedRegExp.prototype, 'flags', {
+      enumerable: true,
+      get: function() {
+        return this._data.flags;
+      }
+    });
+
+    Object.defineProperty(ExtendedRegExp.prototype, 'source', {
+      enumerable: true,
+      get: function() {
+        return this._data.originalSource;
+      }
+    });
+
+    ExtendedRegExp.prototype.toString = function() {
+      return '/' + this.source + '/' + this.flags;
+    };
+
+    ExtendedRegExp.prototype.exec = function(input) {
+      var match = this._regexp.exec(input);
+      if (match) {
+        match.groups = {};
+        var groups = this._data.groups;
+        Object.keys(groups).forEach(function(name) {
+          match.groups[name] = match[groups[name]];
+        })
+      }
+      return match;
+    };
+
+    ExtendedRegExp.prototype.test = function(input) {
+      return this._regexp.test(input)
+    };
+
+    ExtendedRegExp.prototype.constructor = _RegExp;
+
+    global.RegExp = ExtendedRegExp;
+
+    var replace = String.prototype.replace;
+    String.prototype.replace = function(regexp, replacement) {
+      if(regexp instanceof ExtendedRegExp) {
+        var convertedReplacement;
+        switch(typeof replacement) {
+          case 'string':
+            convertedReplacement = replace.call(replacement, R_NAME_REPLACE, function(match, name) {
+              return (name in regexp._data.groups) ? ('$' + regexp._data.groups[name]) : '';
+            });
+            break;
+          case 'function':
+            convertedReplacement = replacement.bind(regexp);
+            break;
+          default:
+            return String(replacement)
+        }
+        return replace.call(this, regexp._regexp, convertedReplacement);
+      } else if((regexp instanceof _RegExp) || (typeof regexp === 'string')) {
+        return replace.call(this, regexp, replacement);
+      } else {
+        throw new TypeError('Invalid first argument for replace. Expected RegExp or string.');
+      }
+    };
+
+    var match = String.prototype.match;
+    String.prototype.match = function(regexp) {
+      if(regexp instanceof ExtendedRegExp) {
+        return regexp.exec(this);
+      } else if(regexp instanceof _RegExp) {
+        return match.call(this, regexp);
+      } else {
+        return this.match(new ExtendedRegExp(regexp));
+      }
+    };
+
+    var split = String.prototype.split;
+    String.prototype.split = function(regexp, maxQuantity) {
+      if(regexp instanceof ExtendedRegExp) {
+        return split.call(this, regexp._regexp, maxQuantity);
+      } else if((regexp instanceof _RegExp) || (typeof regexp === 'string')) {
+        return split.call(this, regexp, maxQuantity);
+      } else {
+        throw new TypeError('Invalid first argument for split. Expected RegExp or string.');
+      }
+    };
+
+    var search = String.prototype.search;
+    String.prototype.search = function(regexp) {
+      if(regexp instanceof ExtendedRegExp) {
+        return search.call(this, regexp._regexp);
+      } else {
+        return search.call(this, regexp);
+      }
+    };
+
+    global._RegExp = _RegExp;
   }
 
-  /**
-   * Polyfill CustomEvent
-   */
-  try {
-    var event = new window.CustomEvent('event', { bubbles: true, cancelable: true });
-  } catch (error) {
-    var CustomEventOriginal = window.CustomEvent || window.Event;
-    var CustomEvent = function(eventName, params) {
-      params = params || {};
-      var event = document.createEvent('CustomEvent');
-      event.initCustomEvent(
-        eventName,
-        (params.bubbles === void 0) ? false : params.bubbles,
-        (params.cancelable === void 0) ? false : params.cancelable,
-        (params.detail === void 0) ? {} : params.detail
-      );
-      return event;
-    };
-    CustomEvent.prototype = CustomEventOriginal.prototype;
-    window.CustomEvent = CustomEvent;
-  }
-
-
-  /**
-   * Polyfill MouseEvent : https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/MouseEvent
-   *  - screenX ✓
-   *  - screenY ✓
-   *  - clientX ✓
-   *  - clientY ✓
-   *  - ctrlKey ✓
-   *  - shiftKey ✓
-   *  - altKey ✓
-   *  - metaKey ✓
-   *  - button ✓
-   *  - buttons ✓
-   *  - region ✓
-   */
-  try {
-    var event = new window.MouseEvent('event', { bubbles: true, cancelable: true });
-  } catch (error) {
-    var MouseEventOriginal = window.MouseEvent || window.Event;
-    var MouseEvent = function(eventName, params) {
-      params = params || {};
-      var event = document.createEvent('MouseEvent');
-
-      // https://msdn.microsoft.com/en-us/library/ff975292(v=vs.85).aspx
-      event.initMouseEvent(
-        eventName,
-        (params.bubbles === void 0) ? false : params.bubbles,
-        (params.cancelable === void 0) ? false : params.cancelable,
-        (params.view === void 0) ? window : params.view,
-        (params.detail === void 0) ? 0 : params.detail,
-        (params.screenX === void 0) ? 0 : params.screenX,
-        (params.screenY === void 0) ? 0 : params.screenY,
-        (params.clientX === void 0) ? 0 : params.clientX,
-        (params.clientY === void 0) ? 0 : params.clientY,
-        (params.ctrlKey === void 0) ? false : params.ctrlKey,
-        (params.altKey === void 0) ? false : params.altKey,
-        (params.shiftKey === void 0) ? false : params.shiftKey,
-        (params.metaKey === void 0) ? false : params.metaKey,
-        (params.button === void 0) ? 0 : params.button,
-        (params.relatedTarget === void 0) ? null : params.relatedTarget
-      );
-
-      event.buttons = (params.buttons === void 0) ? 0 : params.buttons;
-      event.region  = (params.region === void 0) ? null : params.region;
-
-      return event;
-    };
-    MouseEvent.prototype = MouseEventOriginal.prototype;
-    window.MouseEvent = MouseEvent;
-  }
-
-  /**
-   * Polyfill KeyboardEvent : https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/KeyboardEvent
-   *  - key ✓
-   *  - char ✓
-   *  - code ✓
-   *  - location ✓
-   *  - ctrlKey ✓
-   *  - shiftKey ✓
-   *  - altKey ✓
-   *  - metaKey ✓
-   *  - repeat ✓
-   *  - isComposing ✗
-   *  - charCode ✓
-   *  - keyCode ✓
-   *  - which ✓
-   */
-  try {
-    var event = new window.KeyboardEvent('event', { bubbles: true, cancelable: true });
-  } catch (error) {
-    var KeyboardEventOriginal = window.KeyboardEvent || window.Event;
-    var KeyboardEvent = function(eventName, params) {
-      params = params || {};
-      var event = document.createEvent('KeyboardEvent');
-
-      // https://msdn.microsoft.com/en-us/library/ff975297(v=vs.85).aspx
-      event.initKeyboardEvent(
-        eventName,
-        (params.bubbles === void 0) ? false : params.bubbles,
-        (params.cancelable === void 0) ? false : params.cancelable,
-        (params.view === void 0) ? window : params.view,
-        (params.key === void 0) ? '' : params.key,
-        (params.location === void 0) ? 0 : params.location,
-        ((params.ctrlKey === true) ? 'Control ' : '') +
-        ((params.altKey === true) ? 'Alt ' : '') +
-        ((params.shiftKey === true) ? 'Shift ' : '') +
-        ((params.metaKey === true) ? 'Meta ' : ''),
-        (params.repeat === void 0) ? false : params.repeat,
-        (params.locale === void 0) ? navigator.language : params.locale
-      );
-
-      event.keyCode   = (params.keyCode === void 0) ? 0 : params.keyCode;
-      event.code      = (params.code === void 0) ? '' : params.code;
-      event.charCode  = (params.charCode === void 0) ? 0 : params.charCode;
-      event.char      = (params.charCode === void 0) ? '' : params.charCode;
-      event.which     = (params.which === void 0) ? 0 : params.which;
-
-      return event;
-    };
-    KeyboardEvent.prototype = KeyboardEventOriginal.prototype;
-    window.KeyboardEvent = KeyboardEvent;
-  }
-
-
-
-  /**
-   * Polyfill FocusEvent : https://developer.mozilla.org/en-US/docs/Web/API/FocusEvent/FocusEvent
-   *  - relatedTarget ✓
-   */
-  try {
-    var event = new window.FocusEvent('event', { bubbles: true, cancelable: true });
-  } catch (error) {
-    var FocusEventOriginal = window.FocusEvent || window.Event;
-    var FocusEvent = function(eventName, params) {
-      params = params || {};
-      var event = document.createEvent('FocusEvent');
-
-      // https://msdn.microsoft.com/en-us/library/ff975954(v=vs.85).aspx
-      event.initFocusEvent(
-        eventName,
-        (params.bubbles === void 0) ? false : params.bubbles,
-        (params.cancelable === void 0) ? false : params.cancelable,
-        (params.view === void 0) ? window : params.view,
-        (params.detail === void 0) ? {} : params.detail,
-        (params.relatedTarget === void 0) ? null : params.relatedTarget
-      );
-
-      return event;
-    };
-    FocusEvent.prototype = FocusEventOriginal.prototype;
-    window.FocusEvent = FocusEvent;
-  }
-
-})();
+})(window);
