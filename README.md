@@ -8,7 +8,7 @@ npm i regexp-polyfill --save
 ```
 
 #### Documentation
-[https://developers.google.com/web/updates/2017/07/upcoming-regexp-features](upcoming-regexp-features)
+[upcoming-regexp-features](https://developers.google.com/web/updates/2017/07/upcoming-regexp-features)
 
 *WARN* The polyfill only works when creating RegExp with new. The syntax `/pattern/flags`won't work !
 
