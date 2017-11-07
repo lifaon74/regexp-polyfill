@@ -212,10 +212,8 @@
             return String(replacement)
         }
         return replace.call(this, regexp._regexp, convertedReplacement);
-      } else if((regexp instanceof _RegExp) || (typeof regexp === 'string')) {
-        return replace.call(this, regexp, replacement);
       } else {
-        throw new TypeError('Invalid first argument for replace. Expected RegExp or string.');
+        return replace.call(this, regexp, replacement);
       }
     };
 
@@ -234,10 +232,8 @@
     String.prototype.split = function(regexp, maxQuantity) {
       if(regexp instanceof ExtendedRegExp) {
         return split.call(this, regexp._regexp, maxQuantity);
-      } else if((regexp instanceof _RegExp) || (typeof regexp === 'string')) {
-        return split.call(this, regexp, maxQuantity);
       } else {
-        throw new TypeError('Invalid first argument for split. Expected RegExp or string.');
+        return split.call(this, regexp, maxQuantity);
       }
     };
 
