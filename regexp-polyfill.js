@@ -1,51 +1,55 @@
 (function(global) {
+  var RegExp = global.RegExp;
+
+  if (!('flags' in RegExp.prototype)) {
+    Object.defineProperty(RegExp.prototype, 'flags', {
+      configurable: true,
+      get: function() {
+        return this.toString().match(/[gimuy]*$/)[0];
+      }
+    });
+  }
+
+  if (!('sticky' in RegExp.prototype)) {
+    Object.defineProperty(RegExp.prototype, 'sticky', {
+      configurable: true,
+      get: function() {
+        return false;
+      }
+    });
+  }
+
+  if (!('unicode' in RegExp.prototype)) {
+    Object.defineProperty(RegExp.prototype, 'unicode', {
+      configurable: true,
+      get: function() {
+        return false;
+      }
+    });
+  }
+
+
   try {
-    global.RegExp('(?<test>a)');
+    RegExp('(?<test>a)');
   } catch (error) {
-    var _RegExp = global.RegExp;
 
     // https://github.com/commenthol/named-regexp-groups/blob/master/src/index.js
     // https://github.com/slevithan/xregexp/blob/master/src/xregexp.js
     // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/RegExp
     // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/String
     var R_NAME = /([a-zA-Z_$][a-zA-Z_$0-9]{0,50})/;
-    var R_NAME_REPLACE = new _RegExp('\\$<' + R_NAME.source + '>', 'g');
-    var R_NAMED_BACKREF = new _RegExp('^[?:]&' + R_NAME.source);
-    var R_GROUP = new _RegExp('^[?:]<' + R_NAME.source + '>([^]*)');
+    var R_NAME_REPLACE = new RegExp('\\$<' + R_NAME.source + '>', 'g');
+    var R_NAMED_BACKREF = new RegExp('^[?:]&' + R_NAME.source);
+    var R_GROUP = new RegExp('^[?:]<' + R_NAME.source + '>([^]*)');
     var R_GROUPS = /([\\]?[()])/g;
     var R_EMPTY_GROUPS = /([^\\]|^)\(\)/g;
-
-    function assignProto(instance, target) {
-      var proto = Object.getPrototypeOf(instance);
-      if (target.__proto__) {
-        target.__proto__ = proto;
-      } else {
-        for (var key in proto) {
-          target[key] = proto[key];
-        }
-      }
-      return target;
-    }
-
-    function getRegExpFlags(regExp) {
-      if (typeof regExp.flags === 'string') {
-        return regExp.flags;
-      } else {
-        var flags = '';
-        if (regExp.ignoreCase) { flags += 'i'; }
-        if (regExp.multiline) { flags += 'm'; }
-        if (regExp.global) {  flags += 'g'; }
-
-        return flags;
-      }
-    }
 
     function generate(input, flags) {
       var pattern;
 
-      if (input instanceof _RegExp) {
+      if (input instanceof RegExp) {
         if (flags === void 0) {
-          flags = getRegExpFlags(input);
+          flags = input.flags;
         }
         pattern = input.source;
       } else {
@@ -73,7 +77,7 @@
         var block;
         var isGroup = false;
 
-        switch(part) {
+        switch (part) {
           case '(':
             store.groups.push('');
             store.names.push('');
@@ -81,7 +85,7 @@
           case ')':
             block = store.groups.pop();
             name = store.names.pop();
-            if(name) {
+            if (name) {
               output.named[name] = block.substr(1);
             }
             break;
@@ -89,19 +93,19 @@
             // is it a real group, not a cluster (?:...), or assertion (?=...), (?!...)
             isGroup = groups[i - 1] === '(' && !/^\?[:!=]/.test(part);
 
-            if(isGroup) {
+            if (isGroup) {
               index++;
               // named capture group check
               name = R_GROUP.exec(part);
-              if(name && name[1]) {
-                if(!output.groups[name[1]]) {
+              if (name && name[1]) {
+                if (!output.groups[name[1]]) {
                   store.names[store.names.length - 1] = name[1];
                   output.groups[name[1]] = index;
                 } else {
                   output.groups[store.count++] = index;
                 }
                 part = name[2] || '';
-                if(groups[i + 1] === ')' && !name[2]) {
+                if (groups[i + 1] === ')' && !name[2]) {
                   part = '[^]+';
                 }
               } else {
@@ -110,12 +114,13 @@
               }
               // named backreference check
               name = R_NAMED_BACKREF.exec(part);
-              if(name && name[1]) {
+              if (name && name[1]) {
                 part = output.named[name[1]] || '';
               }
             }
             break;
         }
+
         store.groups = store.groups.map(function(group) {
           return (group + part);
         });
@@ -132,14 +137,15 @@
     var ExtendedRegExp = function(pattern, flags) {
       var data = generate(pattern, flags);
 
-      var regexp = new _RegExp(data.source, data.flags);
+      var regexp = new RegExp(data.source, data.flags);
       Object.defineProperty(this, '_regexp', { value: regexp });
       Object.defineProperty(this, '_data', { value: data });
     };
 
     ExtendedRegExp.prototype = {};
-    ['global', 'ignoreCase', 'multiline'].forEach(function(propertyName) {
-      Object.defineProperty(ExtendedRegExp.prototype, propertyName,  {
+
+    ['global', 'ignoreCase', 'multiline', 'sticky', 'unicode'].forEach(function(propertyName) {
+      Object.defineProperty(ExtendedRegExp.prototype, propertyName, {
         enumerable: true,
         get: function() {
           return this._regexp[propertyName];
@@ -147,7 +153,7 @@
       });
     });
 
-    Object.defineProperty(ExtendedRegExp.prototype, 'lastIndex',  {
+    Object.defineProperty(ExtendedRegExp.prototype, 'lastIndex', {
       enumerable: true,
       get: function() {
         return this._regexp.lastIndex;
@@ -171,6 +177,7 @@
       }
     });
 
+
     ExtendedRegExp.prototype.toString = function() {
       return '/' + this.source + '/' + this.flags;
     };
@@ -182,24 +189,25 @@
         var groups = this._data.groups;
         Object.keys(groups).forEach(function(name) {
           match.groups[name] = match[groups[name]];
-        })
+        });
       }
       return match;
     };
 
     ExtendedRegExp.prototype.test = function(input) {
-      return this._regexp.test(input)
+      return this._regexp.test(input);
     };
 
-    ExtendedRegExp.prototype.constructor = _RegExp;
+    ExtendedRegExp.prototype.constructor = RegExp;
 
     global.RegExp = ExtendedRegExp;
 
+
     var replace = String.prototype.replace;
     String.prototype.replace = function(regexp, replacement) {
-      if(regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof ExtendedRegExp) {
         var convertedReplacement;
-        switch(typeof replacement) {
+        switch (typeof replacement) {
           case 'string':
             convertedReplacement = replace.call(replacement, R_NAME_REPLACE, function(match, name) {
               return (name in regexp._data.groups) ? ('$' + regexp._data.groups[name]) : '';
@@ -209,7 +217,7 @@
             convertedReplacement = replacement.bind(regexp);
             break;
           default:
-            return String(replacement)
+            return String(replacement);
         }
         return replace.call(this, regexp._regexp, convertedReplacement);
       } else {
@@ -219,9 +227,9 @@
 
     var match = String.prototype.match;
     String.prototype.match = function(regexp) {
-      if(regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof ExtendedRegExp) {
         return regexp.exec(this);
-      } else if(regexp instanceof _RegExp) {
+      } else if (regexp instanceof RegExp) {
         return match.call(this, regexp);
       } else {
         return this.match(new ExtendedRegExp(regexp));
@@ -230,7 +238,7 @@
 
     var split = String.prototype.split;
     String.prototype.split = function(regexp, maxQuantity) {
-      if(regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof ExtendedRegExp) {
         return split.call(this, regexp._regexp, maxQuantity);
       } else {
         return split.call(this, regexp, maxQuantity);
@@ -239,14 +247,16 @@
 
     var search = String.prototype.search;
     String.prototype.search = function(regexp) {
-      if(regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof ExtendedRegExp) {
         return search.call(this, regexp._regexp);
       } else {
         return search.call(this, regexp);
       }
     };
 
-    global._RegExp = _RegExp;
   }
-
-})(window);
+})(
+  (typeof global !== 'undefined') ? global
+    : ((typeof window !== 'undefined') ? window
+    : ((typeof self !== 'undefined') ? self : this))
+);
