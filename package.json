@@ -1,6 +1,6 @@
 {
   "name": "regexp-polyfill",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Polyfill RegExp : Named capture",
   "main": "regexp-polyfill.js",
   "scripts": {

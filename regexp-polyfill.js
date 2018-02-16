@@ -1,8 +1,8 @@
 (function(global) {
-  var RegExp = global.RegExp;
+  var NativeRegExp = global.RegExp;
 
-  if (!('flags' in RegExp.prototype)) {
-    Object.defineProperty(RegExp.prototype, 'flags', {
+  if (!('flags' in NativeRegExp.prototype)) {
+    Object.defineProperty(NativeRegExp.prototype, 'flags', {
       configurable: true,
       get: function() {
         return this.toString().match(/[gimuy]*$/)[0];
@@ -10,8 +10,8 @@
     });
   }
 
-  if (!('sticky' in RegExp.prototype)) {
-    Object.defineProperty(RegExp.prototype, 'sticky', {
+  if (!('sticky' in NativeRegExp.prototype)) {
+    Object.defineProperty(NativeRegExp.prototype, 'sticky', {
       configurable: true,
       get: function() {
         return false;
@@ -19,8 +19,8 @@
     });
   }
 
-  if (!('unicode' in RegExp.prototype)) {
-    Object.defineProperty(RegExp.prototype, 'unicode', {
+  if (!('unicode' in NativeRegExp.prototype)) {
+    Object.defineProperty(NativeRegExp.prototype, 'unicode', {
       configurable: true,
       get: function() {
         return false;
@@ -30,7 +30,7 @@
 
 
   try {
-    RegExp('(?<test>a)');
+    NativeRegExp('(?<test>a)');
   } catch (error) {
 
     // https://github.com/commenthol/named-regexp-groups/blob/master/src/index.js
@@ -38,16 +38,16 @@
     // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/RegExp
     // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/String
     var R_NAME = /([a-zA-Z_$][a-zA-Z_$0-9]{0,50})/;
-    var R_NAME_REPLACE = new RegExp('\\$<' + R_NAME.source + '>', 'g');
-    var R_NAMED_BACKREF = new RegExp('^[?:]&' + R_NAME.source);
-    var R_GROUP = new RegExp('^[?:]<' + R_NAME.source + '>([^]*)');
+    var R_NAME_REPLACE = new NativeRegExp('\\$<' + R_NAME.source + '>', 'g');
+    var R_NAMED_BACKREF = new NativeRegExp('^[?:]&' + R_NAME.source);
+    var R_GROUP = new NativeRegExp('^[?:]<' + R_NAME.source + '>([^]*)');
     var R_GROUPS = /([\\]?[()])/g;
     var R_EMPTY_GROUPS = /([^\\]|^)\(\)/g;
 
     function generate(input, flags) {
       var pattern;
 
-      if (input instanceof RegExp) {
+      if (input instanceof NativeRegExp) {
         if (flags === void 0) {
           flags = input.flags;
         }
@@ -134,18 +134,24 @@
       return output;
     }
 
-    var ExtendedRegExp = function(pattern, flags) {
-      var data = generate(pattern, flags);
-
-      var regexp = new RegExp(data.source, data.flags);
-      Object.defineProperty(this, '_regexp', { value: regexp });
-      Object.defineProperty(this, '_data', { value: data });
+    var RegExp = function(pattern, flags) {
+      if(this instanceof RegExp) {
+        var data = generate(pattern, flags);
+        var regexp = new NativeRegExp(data.source, data.flags);
+        Object.defineProperty(this, '_regexp', { value: regexp });
+        Object.defineProperty(this, '_data', { value: data });
+      } else {
+        return new RegExp(pattern, flags);
+      }
     };
 
-    ExtendedRegExp.prototype = {};
+    RegExp.toString = function() {
+      return 'function RegExp() { [polyfilled code] }';
+    }
+    RegExp.prototype = {};
 
     ['global', 'ignoreCase', 'multiline', 'sticky', 'unicode'].forEach(function(propertyName) {
-      Object.defineProperty(ExtendedRegExp.prototype, propertyName, {
+      Object.defineProperty(RegExp.prototype, propertyName, {
         enumerable: true,
         get: function() {
           return this._regexp[propertyName];
@@ -153,7 +159,7 @@
       });
     });
 
-    Object.defineProperty(ExtendedRegExp.prototype, 'lastIndex', {
+    Object.defineProperty(RegExp.prototype, 'lastIndex', {
       enumerable: true,
       get: function() {
         return this._regexp.lastIndex;
@@ -163,14 +169,14 @@
       }
     });
 
-    Object.defineProperty(ExtendedRegExp.prototype, 'flags', {
+    Object.defineProperty(RegExp.prototype, 'flags', {
       enumerable: true,
       get: function() {
         return this._data.flags;
       }
     });
 
-    Object.defineProperty(ExtendedRegExp.prototype, 'source', {
+    Object.defineProperty(RegExp.prototype, 'source', {
       enumerable: true,
       get: function() {
         return this._data.originalSource;
@@ -178,11 +184,11 @@
     });
 
 
-    ExtendedRegExp.prototype.toString = function() {
+    RegExp.prototype.toString = function() {
       return '/' + this.source + '/' + this.flags;
     };
 
-    ExtendedRegExp.prototype.exec = function(input) {
+    RegExp.prototype.exec = function(input) {
       var match = this._regexp.exec(input);
       if (match) {
         match.groups = {};
@@ -194,18 +200,18 @@
       return match;
     };
 
-    ExtendedRegExp.prototype.test = function(input) {
+    RegExp.prototype.test = function(input) {
       return this._regexp.test(input);
     };
 
-    ExtendedRegExp.prototype.constructor = RegExp;
+    RegExp.prototype.constructor = NativeRegExp;
 
-    global.RegExp = ExtendedRegExp;
+    global.RegExp = RegExp;
 
 
     var replace = String.prototype.replace;
     String.prototype.replace = function(regexp, replacement) {
-      if (regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof RegExp) {
         var convertedReplacement;
         switch (typeof replacement) {
           case 'string':
@@ -227,18 +233,18 @@
 
     var match = String.prototype.match;
     String.prototype.match = function(regexp) {
-      if (regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof RegExp) {
         return regexp.exec(this);
-      } else if (regexp instanceof RegExp) {
+      } else if (regexp instanceof NativeRegExp) {
         return match.call(this, regexp);
       } else {
-        return this.match(new ExtendedRegExp(regexp));
+        return this.match(new RegExp(regexp));
       }
     };
 
     var split = String.prototype.split;
     String.prototype.split = function(regexp, maxQuantity) {
-      if (regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof RegExp) {
         return split.call(this, regexp._regexp, maxQuantity);
       } else {
         return split.call(this, regexp, maxQuantity);
@@ -247,7 +253,7 @@
 
     var search = String.prototype.search;
     String.prototype.search = function(regexp) {
-      if (regexp instanceof ExtendedRegExp) {
+      if (regexp instanceof RegExp) {
         return search.call(this, regexp._regexp);
       } else {
         return search.call(this, regexp);
