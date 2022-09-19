@@ -16,7 +16,7 @@ Currently only named captures are polyfilled.
 
 #### Example:
 ```js
-const pattern = new RegExp(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2}));
+const pattern = new RegExp("?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})");
 const result = pattern.exec('2017-07-10');
 // result.groups.year === '2017'
 // result.groups.month === '07'
